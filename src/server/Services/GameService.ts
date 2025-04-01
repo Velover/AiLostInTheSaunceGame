@@ -163,6 +163,9 @@ export class GameService implements OnStart, OnInit {
 	}
 
 	private startGame() {
+		// Clear any previous game state completely
+		this.clearGameState();
+
 		this.gameActive = true;
 		this.gameTimer = this.currentLevel?.timeLimit || 60;
 		this.spawnIngredients();
@@ -182,6 +185,13 @@ export class GameService implements OnStart, OnInit {
 
 		this.gameActive = false;
 
+		// Save collected ingredients count before resetting
+		const ingredientsCollected = [...this.ingredients]
+			.map((i) => i[1])
+			.filter((i) => i.collected)
+			.size();
+		const totalIngredients = this.ingredients.size();
+
 		// Reset player positions
 		for (const [player, data] of this.players) {
 			data.isTrapped = false;
@@ -198,16 +208,29 @@ export class GameService implements OnStart, OnInit {
 		// Broadcast game over with victory status to clients
 		Events.gameOver.broadcast(victory);
 
-		// Final state update
+		// Final state update - keep the collected count for proper display
 		const gameState: GameState = {
 			timeRemaining: 0,
-			ingredientsCollected: 0,
-			totalIngredients: 0,
+			ingredientsCollected: ingredientsCollected, // Use saved value instead of 0
+			totalIngredients: totalIngredients, // Use saved value instead of 0
 			gameOver: true,
 			victory: victory,
 		};
 
 		Events.updateGameState.broadcast(gameState);
+	}
+
+	private clearGameState() {
+		// Clear physical objects if they exist from previous game
+		this.clearPhysicalObjects();
+
+		// Clear ingredients map
+		this.ingredients.clear();
+
+		// Reset level if needed
+		if (!this.currentLevel) {
+			this.currentLevel = this.createLevel(1);
+		}
 	}
 
 	private clearPhysicalObjects() {

@@ -70,6 +70,20 @@ export class GameController implements OnStart, OnInit {
 	}
 
 	public startGame() {
+		// Reset local game state before starting a new game
+		this.currentState = {
+			timeRemaining: 0,
+			ingredientsCollected: 0,
+			totalIngredients: 0,
+		};
+
+		// Make sure player is not trapped when restarting
+		if (this.isTrapped && this.humanoid) {
+			this.isTrapped = false;
+			this.humanoid.WalkSpeed = 16;
+		}
+
+		// Fire event to server to start game
 		Events.gameStart.fire();
 	}
 

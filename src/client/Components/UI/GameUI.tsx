@@ -15,6 +15,12 @@ export function GameUI({ visible }: GameUIProps) {
         totalIngredients: 0,
     });
 
+    const [lastValidGameState, setLastValidGameState] = useState<GameState>({
+        timeRemaining: 0,
+        ingredientsCollected: 0,
+        totalIngredients: 0,
+    });
+
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
     const [showLeaderboard, setShowLeaderboard] = useState(false);
     const [showTutorial, setShowTutorial] = useState(true);
@@ -26,18 +32,22 @@ export function GameUI({ visible }: GameUIProps) {
     useEffect(() => {
         const updateInterval = task.spawn(() => {
             while (true) {
-                setGameState(gameController.getCurrentState());
+                const currentState = gameController.getCurrentState();
+                setGameState(currentState);
+
+                if (currentState.timeRemaining > 0) {
+                    setLastValidGameState(currentState);
+                }
+
                 setLeaderboard(gameController.getLeaderboard());
                 task.wait(0.5);
             }
         });
 
-        // Hide tutorial after delay
         task.delay(10, () => {
             setShowTutorial(false);
         });
 
-        // Add event listener for game over
         const gameOverConnection = Events.gameOver.connect((isVictory) => {
             setGameOver(true);
             setVictory(isVictory);
@@ -61,7 +71,6 @@ export function GameUI({ visible }: GameUIProps) {
 
     if (!visible) return undefined;
 
-    // Game Over Screen
     if (gameOver) {
         return (
             <frame
@@ -93,8 +102,8 @@ export function GameUI({ visible }: GameUIProps) {
                 <textlabel
                     Text={
                         victory
-                            ? `You collected all ${gameState.totalIngredients} ingredients!`
-                            : `You collected ${gameState.ingredientsCollected} out of ${gameState.totalIngredients} ingredients.`
+                            ? `You collected all ${gameState.totalIngredients || lastValidGameState.totalIngredients} ingredients!`
+                            : `You collected ${gameState.ingredientsCollected || lastValidGameState.ingredientsCollected} out of ${gameState.totalIngredients || lastValidGameState.totalIngredients} ingredients.`
                     }
                     Position={UDim2.fromScale(0, 0.25)}
                     Size={UDim2.fromScale(1, 0.15)}
@@ -120,7 +129,9 @@ export function GameUI({ visible }: GameUIProps) {
                         MouseButton1Click: () => {
                             setGameOver(false);
                             setVictory(false);
-                            gameController.startGame();
+                            task.delay(0.1, () => {
+                                gameController.startGame();
+                            });
                         },
                     }}
                 >
@@ -132,7 +143,6 @@ export function GameUI({ visible }: GameUIProps) {
 
     return (
         <>
-            {/* Main HUD Panel */}
             <frame
                 AnchorPoint={new Vector2(0, 0)}
                 Position={UDim2.fromScale(0.02, 0.02)}
@@ -225,7 +235,6 @@ export function GameUI({ visible }: GameUIProps) {
                 </frame>
             </frame>
 
-            {/* Tutorial Panel */}
             {showTutorial && (
                 <frame
                     AnchorPoint={new Vector2(0.5, 0.5)}
@@ -336,7 +345,6 @@ export function GameUI({ visible }: GameUIProps) {
                 </frame>
             )}
 
-            {/* Leaderboard Panel */}
             {showLeaderboard && (
                 <frame
                     AnchorPoint={new Vector2(1, 0)}
@@ -432,7 +440,6 @@ export function GameUI({ visible }: GameUIProps) {
                 </frame>
             )}
 
-            {/* Game status notifications */}
             <frame
                 AnchorPoint={new Vector2(0.5, 0)}
                 Position={UDim2.fromScale(0.5, 0.05)}
