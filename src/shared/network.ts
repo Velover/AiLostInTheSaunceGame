@@ -4,6 +4,7 @@ interface ClientToServerEvents {
 	playerMoved: (position: Vector3) => void;
 	collectIngredient: (id: string) => void;
 	gameStart: () => void;
+	playerFreed: () => void; // Added for trap recovery
 }
 
 interface ServerToClientEvents {
@@ -11,7 +12,9 @@ interface ServerToClientEvents {
 	ingredientCollected: (id: string, playerName: string) => void;
 	playerTrapped: (playerName: string) => void;
 	updateLeaderboard: (leaderboard: LeaderboardEntry[]) => void;
-	gameStarted: () => void; // Added event for game start notification
+	gameStarted: () => void;
+	gameOver: (victory: boolean) => void; // Added for game completion
+	dangerAlert: (position: Vector3, type: string) => void; // Added for danger notification
 }
 
 interface ClientToServerFunctions {
@@ -27,6 +30,8 @@ export interface GameState {
 	ingredientsCollected: number;
 	totalIngredients: number;
 	playerPosition?: Vector3;
+	gameOver?: boolean; // Add game over state
+	victory?: boolean; // Add victory state
 }
 
 export interface LeaderboardEntry {

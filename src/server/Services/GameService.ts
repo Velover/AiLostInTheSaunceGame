@@ -11,6 +11,13 @@ import {
 	PlayerData,
 } from "shared/types/GameTypes";
 
+// Create BindableEvent for server-side communication
+export interface GameBindableEvents {
+	gameStarted: BindableEvent;
+	gameEnded: BindableEvent;
+	dangerAlert: BindableEvent; // Add dangerAlert event
+}
+
 @Service({})
 export class GameService implements OnStart, OnInit {
 	private players = new Map<Player, PlayerData>();
@@ -20,6 +27,13 @@ export class GameService implements OnStart, OnInit {
 	private gameTimer: number = 0;
 	private ingredientsFolder: Folder | undefined;
 	private obstaclesFolder: Folder | undefined;
+
+	// Bindable events for other services to listen to
+	public readonly bindings: GameBindableEvents = {
+		gameStarted: new Instance("BindableEvent"),
+		gameEnded: new Instance("BindableEvent"),
+		dangerAlert: new Instance("BindableEvent"), // Add the new BindableEvent instance
+	};
 
 	onInit() {
 		// Create folders for organizing game objects
@@ -37,6 +51,7 @@ export class GameService implements OnStart, OnInit {
 		Events.gameStart.connect(() => this.startGame());
 		Events.playerMoved.connect((player, position) => this.handlePlayerMove(player, position));
 		Events.collectIngredient.connect((player, id) => this.collectIngredient(player, id));
+		Events.playerFreed.connect((player) => this.handlePlayerFreed(player));
 
 		Players.PlayerAdded.Connect((player) => this.handlePlayerJoin(player));
 		Players.PlayerRemoving.Connect((player) => this.handlePlayerLeave(player));
@@ -51,7 +66,7 @@ export class GameService implements OnStart, OnInit {
 					this.broadcastGameState();
 
 					if (this.gameTimer <= 0) {
-						this.endGame();
+						this.endGame(false); // Time ran out - no victory
 					}
 				}
 				task.wait(1);
@@ -77,9 +92,16 @@ export class GameService implements OnStart, OnInit {
 		this.updateLeaderboard();
 	}
 
+	private handlePlayerFreed(player: Player) {
+		const playerData = this.players.get(player);
+		if (playerData) {
+			playerData.isTrapped = false;
+		}
+	}
+
 	private handlePlayerMove(player: Player, position: Vector3) {
 		const playerData = this.players.get(player);
-		if (!playerData) return;
+		if (!playerData || playerData.isTrapped) return; // Don't check if already trapped
 
 		playerData.position = position;
 
@@ -89,7 +111,30 @@ export class GameService implements OnStart, OnInit {
 				if (this.isPositionInBox(position, obstacle.position, obstacle.size)) {
 					playerData.isTrapped = true;
 					Events.playerTrapped.broadcast(player.Name);
-					break;
+					return; // Exit after trapping
+				}
+			}
+		}
+
+		// Check collisions with danger objects
+		const dangerFolder = Workspace.FindFirstChild("Dangers");
+		if (dangerFolder) {
+			for (const child of dangerFolder.GetChildren()) {
+				const isTrap = child.GetAttribute("traps") as boolean;
+
+				if (isTrap && child.IsA("BasePart")) {
+					// Use a larger hit radius for dangers
+					if (
+						this.isPositionInBox(
+							position,
+							child.Position,
+							child.Size.add(new Vector3(1, 1, 1)), // Add a buffer
+						)
+					) {
+						playerData.isTrapped = true;
+						Events.playerTrapped.broadcast(player.Name);
+						return;
+					}
 				}
 			}
 		}
@@ -122,13 +167,19 @@ export class GameService implements OnStart, OnInit {
 		this.gameTimer = this.currentLevel?.timeLimit || 60;
 		this.spawnIngredients();
 		this.spawnObstacles();
-		this.broadcastGameState();
 
-		// Broadcast game started event to all clients
+		// Broadcast via bindable event for other services
+		this.bindings.gameStarted.Fire();
+
+		// Broadcast via remote event for clients
 		Events.gameStarted.broadcast();
+
+		this.broadcastGameState();
 	}
 
-	private endGame() {
+	private endGame(victory: boolean = false) {
+		if (!this.gameActive) return; // Prevent multiple end game calls
+
 		this.gameActive = false;
 
 		// Reset player positions
@@ -141,7 +192,22 @@ export class GameService implements OnStart, OnInit {
 		this.ingredients.clear();
 		this.clearPhysicalObjects();
 
-		this.broadcastGameState();
+		// Fire bindable event first (for other services)
+		this.bindings.gameEnded.Fire(victory);
+
+		// Broadcast game over with victory status to clients
+		Events.gameOver.broadcast(victory);
+
+		// Final state update
+		const gameState: GameState = {
+			timeRemaining: 0,
+			ingredientsCollected: 0,
+			totalIngredients: 0,
+			gameOver: true,
+			victory: victory,
+		};
+
+		Events.updateGameState.broadcast(gameState);
 	}
 
 	private clearPhysicalObjects() {
@@ -273,13 +339,24 @@ export class GameService implements OnStart, OnInit {
 	}
 
 	private broadcastGameState() {
+		const ingredientsCollected = [...this.ingredients]
+			.map((i) => i[1])
+			.filter((i) => i.collected)
+			.size();
+
+		const totalIngredients = this.ingredients.size();
+
+		// Check if all ingredients are collected
+		if (ingredientsCollected === totalIngredients && totalIngredients > 0 && this.gameActive) {
+			// End game with victory
+			this.endGame(true);
+			return;
+		}
+
 		const gameState: GameState = {
 			timeRemaining: this.gameTimer,
-			ingredientsCollected: [...this.ingredients]
-				.map((i) => i[1])
-				.filter((i) => i.collected)
-				.size(),
-			totalIngredients: this.ingredients.size(),
+			ingredientsCollected: ingredientsCollected,
+			totalIngredients: totalIngredients,
 		};
 
 		Events.updateGameState.broadcast(gameState);
@@ -308,5 +385,14 @@ export class GameService implements OnStart, OnInit {
 			position.Z >= boxPosition.Z - boxSize.Z / 2 &&
 			position.Z <= boxPosition.Z + boxSize.Z / 2
 		);
+	}
+
+	// Add a method to broadcast danger alerts to clients
+	public broadcastDangerAlert(position: Vector3, dangerType: string): void {
+		// Use the BindableEvent for server-side communication
+		this.bindings.dangerAlert.Fire(position, dangerType);
+
+		// Also send to clients
+		Events.dangerAlert.broadcast(position, dangerType);
 	}
 }

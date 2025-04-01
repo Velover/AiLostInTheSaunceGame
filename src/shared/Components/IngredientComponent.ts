@@ -1,7 +1,6 @@
+import { BaseComponent, Component } from "@flamework/components";
 import { OnStart } from "@flamework/core";
-import { Component, BaseComponent } from "@flamework/components";
 import { IngredientType } from "shared/types/GameTypes";
-import { Workspace } from "@rbxts/services";
 
 interface Attributes {
 	id: string;

@@ -148,7 +148,7 @@ export class GameController implements OnStart, OnInit {
 	}
 
 	private onPlayerTrapped() {
-		if (!this.humanoid) return;
+		if (!this.humanoid || this.isTrapped) return; // Prevent multiple traps at once
 
 		this.isTrapped = true;
 
@@ -182,6 +182,9 @@ export class GameController implements OnStart, OnInit {
 			if (this.humanoid && this.humanoid.Parent) {
 				this.humanoid.WalkSpeed = originalWalkSpeed;
 				this.isTrapped = false;
+
+				// Tell server we're no longer trapped
+				Events.playerFreed.fire();
 			}
 		});
 	}

@@ -37,6 +37,32 @@ export class HUDController implements OnInit, OnStart {
 				this.showNotification(`All ingredients collected!`, 3);
 			}
 		});
+
+		// Add danger alert handler
+		Events.dangerAlert.connect((position, dangerType) => {
+			// Check if danger is close enough to player to warn about
+			if (this.isPlayerNearPosition(position, 30)) {
+				switch (dangerType) {
+					case "SauceBall":
+						this.showNotification("Watch out! Sauce ball incoming!", 2);
+						break;
+					case "ExpandingPuddle":
+						this.showNotification("Expanding sauce puddle formed nearby!", 2);
+						break;
+					default:
+						this.showNotification("New danger nearby!", 2);
+				}
+			}
+		});
+
+		// Game over handler
+		Events.gameOver.connect((victory) => {
+			if (victory) {
+				this.showNotification("You collected all ingredients! Victory!", 5);
+			} else {
+				this.showNotification("Game over! Try again?", 5);
+			}
+		});
 	}
 
 	onStart() {
@@ -71,5 +97,15 @@ export class HUDController implements OnInit, OnStart {
 
 		// Wait before showing the next notification
 		task.delay(1, () => this.processNotificationQueue());
+	}
+
+	private isPlayerNearPosition(position: Vector3, maxDistance: number): boolean {
+		const character = Players.LocalPlayer.Character;
+		if (!character) return false;
+
+		const rootPart = character.FindFirstChild("HumanoidRootPart") as BasePart;
+		if (!rootPart) return false;
+
+		return rootPart.Position.sub(position).Magnitude < maxDistance;
 	}
 }

@@ -2,6 +2,7 @@ import { useFlameworkDependency } from "@rbxts/flamework-react-utils";
 import React, { useEffect, useState } from "@rbxts/react";
 import { GameController } from "client/Controllers/GameController";
 import { GameState, LeaderboardEntry } from "shared/network";
+import { Events } from "../../network";
 
 interface GameUIProps {
     visible: boolean;
@@ -17,6 +18,8 @@ export function GameUI({ visible }: GameUIProps) {
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
     const [showLeaderboard, setShowLeaderboard] = useState(false);
     const [showTutorial, setShowTutorial] = useState(true);
+    const [gameOver, setGameOver] = useState(false);
+    const [victory, setVictory] = useState(false);
 
     const gameController = useFlameworkDependency<GameController>();
 
@@ -34,7 +37,17 @@ export function GameUI({ visible }: GameUIProps) {
             setShowTutorial(false);
         });
 
-        return () => task.cancel(updateInterval);
+        // Add event listener for game over
+        const gameOverConnection = Events.gameOver.connect((isVictory) => {
+            setGameOver(true);
+            setVictory(isVictory);
+            setShowTutorial(false);
+        });
+
+        return () => {
+            task.cancel(updateInterval);
+            gameOverConnection.Disconnect();
+        };
     }, []);
 
     const toggleLeaderboard = () => {
@@ -47,6 +60,75 @@ export function GameUI({ visible }: GameUIProps) {
     };
 
     if (!visible) return undefined;
+
+    // Game Over Screen
+    if (gameOver) {
+        return (
+            <frame
+                AnchorPoint={new Vector2(0.5, 0.5)}
+                Position={UDim2.fromScale(0.5, 0.5)}
+                Size={UDim2.fromOffset(400, 300)}
+                BackgroundColor3={victory ? Color3.fromRGB(50, 100, 50) : Color3.fromRGB(100, 50, 50)}
+                BackgroundTransparency={0.2}
+                BorderSizePixel={0}
+            >
+                <uicorner CornerRadius={new UDim(0, 8)} />
+                <uipadding
+                    PaddingTop={new UDim(0, 15)}
+                    PaddingBottom={new UDim(0, 15)}
+                    PaddingLeft={new UDim(0, 15)}
+                    PaddingRight={new UDim(0, 15)}
+                />
+
+                <textlabel
+                    Text={victory ? "Victory!" : "Game Over!"}
+                    Size={UDim2.fromScale(1, 0.2)}
+                    BackgroundTransparency={1}
+                    Font={Enum.Font.GothamBold}
+                    TextColor3={Color3.fromRGB(255, 255, 255)}
+                    TextSize={32}
+                    TextXAlignment={Enum.TextXAlignment.Center}
+                />
+
+                <textlabel
+                    Text={
+                        victory
+                            ? `You collected all ${gameState.totalIngredients} ingredients!`
+                            : `You collected ${gameState.ingredientsCollected} out of ${gameState.totalIngredients} ingredients.`
+                    }
+                    Position={UDim2.fromScale(0, 0.25)}
+                    Size={UDim2.fromScale(1, 0.15)}
+                    BackgroundTransparency={1}
+                    Font={Enum.Font.GothamMedium}
+                    TextColor3={Color3.fromRGB(255, 255, 255)}
+                    TextSize={18}
+                    TextWrapped={true}
+                    TextXAlignment={Enum.TextXAlignment.Center}
+                />
+
+                <textbutton
+                    Text="Play Again"
+                    Position={UDim2.fromScale(0.5, 0.7)}
+                    Size={UDim2.fromOffset(150, 40)}
+                    AnchorPoint={new Vector2(0.5, 0.5)}
+                    BackgroundColor3={Color3.fromRGB(76, 175, 80)}
+                    BorderSizePixel={0}
+                    Font={Enum.Font.GothamBold}
+                    TextColor3={Color3.fromRGB(255, 255, 255)}
+                    TextSize={16}
+                    Event={{
+                        MouseButton1Click: () => {
+                            setGameOver(false);
+                            setVictory(false);
+                            gameController.startGame();
+                        },
+                    }}
+                >
+                    <uicorner CornerRadius={new UDim(0, 4)} />
+                </textbutton>
+            </frame>
+        );
+    }
 
     return (
         <>
